@@ -59,7 +59,7 @@ Start the run while you give the hook. The report lands about 90 seconds later.
 2. **(15s)** "This is a weekend of logs from an AI startup: 12,000 events, 4.6 MB."
 3. **(30s) "Activity faster than any person" chart.** "192 actions a minute from a key that normally does 4. That's not a person." Point at the sidebar: **Read raw evidence, on this laptop, qwen3:8b**. The local model is reading the raw payloads right now.
 4. **(30s) Data boundary.** Sidebar: **Redact secrets, 9 removed**. Top bar: **4.6 MB kept on this laptop** vs. **~98 KB sent to Claude**. Click **View** to show exactly what Claude saw.
-5. **(45s) The report.** Read the headline. **Verdicts:** the on-call engineer's exec cleared as benign (Claude checked the roster), the attack marked malicious. **Rotate these credentials first:** the HF token goes first because it was used last and has write access. Copy one command.
+5. **(45s) The report.** Read the headline. **Verdicts:** the on-call engineer's exec cleared as benign (Claude checked the roster), the attack marked malicious. **Rotate these credentials first:** point at #1 and read Claude's reason out loud (the order can differ between runs; each order is reasoned from the evidence). Copy one command.
 6. **(20s)** Click **Send to #incident**, and it lands in Slack.
 7. **(20s) Honest limits and why us.** Synthetic data in our own log format. Rules are tuned to ML pipelines on Kubernetes and AWS. Next: CloudTrail and Kubernetes audit importers plus a runtime sensor (Falco). v1 reads logs and does not auto-remediate; a human approves every action.
 

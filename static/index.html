@@ -177,8 +177,11 @@
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmtB = n => n >= 1e6 ? (n/1e6).toFixed(1)+" MB" : n >= 1e3 ? (n/1e3).toFixed(1)+" KB" : n+" B";
-const when = ts => { if(!ts) return ""; const d = new Date(ts); if (isNaN(d)) return ts;
-  return d.toLocaleString("en-US",{weekday:"short",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false,timeZone:"UTC"}); };
+const fmtT = d => d.toLocaleString("en-US",{weekday:"short",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false,timeZone:"UTC"});
+const when = ts => { if(!ts) return ""; let d = new Date(ts); if (!isNaN(d)) return fmtT(d);
+  const m = String(ts).match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?Z?/);  // ranges: show the start time
+  if (m){ d = new Date(m[0].endsWith("Z") ? m[0] : m[0]+"Z"); if (!isNaN(d)) return fmtT(d); }
+  return ts; };
 const STAGE = s => (s||"").replaceAll("_"," ").replace(/^\w/, c=>c.toUpperCase());
 const TOOL = (n,a) => ({get_group:`Read evidence ${a}`, get_machine_speed_bursts:"Checked machine-speed activity",
   get_credential_inventory:"Loaded credential inventory", get_rotation_playbook:`Opened playbook: ${STAGE(a)}`,
@@ -265,7 +268,7 @@ function renderReport(r){
     ${r.attacker_profile?`<p class="lead" style="margin-top:10px"><b style="color:var(--ink)">Who did this:</b> ${esc(r.attacker_profile)}</p>`:""}
     <div class="actions"><button class="btn btn-primary" onclick="notify()">Send to #incident</button><button class="btn btn-line" onclick="showEgress()">View data sent to Claude</button></div>
   </section>
-  <section><h2>Rotate these credentials first</h2><p class="sub">In order. The one still in use is first.</p>
+  <section><h2>Rotate these credentials first</h2><p class="sub">In priority order</p>
     <table><tr><th>#</th><th>Credential</th><th>Why it's exposed</th></tr>${creds}</table></section>
   <section><h2>Containment plan</h2><p class="sub">Steps an engineer can run tonight</p>
     <table><tr><th>#</th><th>Step</th><th>Owner</th></tr>${steps}</table></section>
