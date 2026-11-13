@@ -29,11 +29,27 @@ Your job:
 Be precise and calm. Do not invent facts that the evidence does not show; list unknowns as
 open_questions. When done, call submit_incident_report exactly once."""
 
+LIVE_ADDENDUM = """
+
+LIVE MODE. Lifeboat was watching in real time with tripwires armed (lures that only an automated
+attacker would act on, and canary credentials). When a tripwire fired, Lifeboat's deterministic
+reflexes already applied reversible containment within a second. You can see those actions with
+get_containment_status. Your extra job:
+- Verify whether containment held: check what the attacker did after the reflex time (denials vs successes).
+- Decide whether any credential or asset was exposed BEFORE containment, and contain it with
+  take_reversible_action if needed (allowed kinds: isolate_workload, suspend_identity,
+  quarantine_dataset, suspend_account, deactivate_credential, block_ip).
+- Anything irreversible (rotating or deleting credentials, deleting data, rebuilding images,
+  permanent RBAC changes, notifying customers) must go through request_approval, one call per item.
+- Only recommend customer notification if customer data was actually accessed.
+In the report, say plainly what Lifeboat already did and what is waiting for a human."""
+
 REPORT_SCHEMA = {
     "type": "object",
     "properties": {
         "severity": {"type": "string", "enum": ["critical", "high", "medium", "low"]},
         "headline": {"type": "string", "description": "One sentence a CEO understands."},
+        "containment_summary": {"type": "string", "description": "Live mode only: what was contained, when, and whether it held."},
         "executive_summary": {"type": "string", "description": "3-5 sentences."},
         "attacker_profile": {"type": "string", "description": "Human or automated agent, and the evidence."},
         "verdicts": {"type": "array", "items": {"type": "object", "properties": {
@@ -78,6 +94,21 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {}}},
     {"name": "submit_incident_report", "description": "File the final incident report. Call exactly once.",
      "input_schema": REPORT_SCHEMA},
+]
+
+LIVE_TOOLS = [
+    {"name": "get_containment_status", "description": "Tripwires armed and fired, the reversible actions Lifeboat "
+     "already applied (with timestamps), and what the attacker achieved (files read, models downloaded, secrets "
+     "exposed, attempts denied).", "input_schema": {"type": "object", "properties": {}}},
+    {"name": "take_reversible_action", "description": "Apply an additional REVERSIBLE containment action now.",
+     "input_schema": {"type": "object", "properties": {
+         "kind": {"type": "string", "enum": ["isolate_workload", "suspend_identity", "quarantine_dataset",
+                                              "suspend_account", "deactivate_credential", "block_ip"]},
+         "target": {"type": "string"}, "reason": {"type": "string"}}, "required": ["kind", "target", "reason"]}},
+    {"name": "request_approval", "description": "Ask a human to approve an irreversible step. One item per call.",
+     "input_schema": {"type": "object", "properties": {
+         "action": {"type": "string", "description": "Short imperative, e.g. 'Rotate the ds-worker service account token'"},
+         "reason": {"type": "string"}, "command": {"type": "string"}}, "required": ["action", "reason"]}},
 ]
 
 PLAYBOOKS = {
@@ -126,11 +157,12 @@ def _ser(o):
 
 
 class Investigation:
-    def __init__(self, findings: dict, redactor, on_tool=None, on_egress=None):
+    def __init__(self, findings: dict, redactor, on_tool=None, on_egress=None, live=None):
         self.f = findings  # already redacted
         self.redactor = redactor
         self.on_tool = on_tool or (lambda *a: None)
         self.on_egress = on_egress or (lambda *a: None)
+        self.live = live  # dict with callbacks: status(), act(kind, target, reason), approve(action, reason, command)
         self.groups = {g["id"]: g for c in findings["candidates"] for g in c["groups"]}
         self.report = None
 
@@ -150,6 +182,12 @@ class Investigation:
         if name == "submit_incident_report":
             self.report = args
             return {"ok": True}
+        if self.live and name == "get_containment_status":
+            return self.live["status"]()
+        if self.live and name == "take_reversible_action":
+            return self.live["act"](args.get("kind"), args.get("target"), args.get("reason", ""))
+        if self.live and name == "request_approval":
+            return self.live["approve"](args.get("action", ""), args.get("reason", ""), args.get("command", ""))
         return {"error": f"unknown tool {name}"}
 
     def overview(self) -> str:
@@ -168,6 +206,7 @@ class Investigation:
             "company": self.f["inventory"].get("company"),
             "log_window": self.f["window"], "events_scanned": self.f["events_total"],
             "local_analyzer": self.f["analyzer"],
+            "lifeboat_live": self.f.get("live_summary"),
             "machine_speed_actors": [{k: b[k] for k in ("actor", "start", "end", "events", "peak_per_min", "baseline_peak_per_min", "median_gap_ms")}
                                      for b in self.f["bursts"]],
             "candidates": cands,
@@ -179,16 +218,18 @@ class Investigation:
         import anthropic
 
         client = anthropic.Anthropic()
+        system = SYSTEM + (LIVE_ADDENDUM if self.live else "")
+        tools = TOOLS[:-1] + (LIVE_TOOLS if self.live else []) + TOOLS[-1:]
         messages = [{"role": "user", "content": "Investigate this weekend's detections and file the incident report.\n\n"
                                                 + self.overview()}]
         for turn in range(MAX_TURNS):
             ser = json.dumps(messages, default=_ser)
-            body = json.dumps({"system": SYSTEM, "messages": json.loads(ser), "tools": TOOLS})
+            body = json.dumps({"system": system, "messages": json.loads(ser), "tools": tools})
             assert_clean(ser)
             self.on_egress(len(body.encode()), messages[-1])
             force = turn >= MAX_TURNS - 2
             resp = client.messages.create(
-                model=CLAUDE_MODEL, max_tokens=8000, system=SYSTEM, tools=TOOLS, messages=messages,
+                model=CLAUDE_MODEL, max_tokens=8000, system=system, tools=tools, messages=messages,
                 tool_choice={"type": "tool", "name": "submit_incident_report"} if force else {"type": "auto"},
             )
             messages.append({"role": "assistant", "content": resp.content})

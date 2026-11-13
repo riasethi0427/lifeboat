@@ -154,6 +154,8 @@ RULES = {
     "R13": _rule("R13", "medium", "Human exec into a production pod", "interactive shell in prod; usually debugging, sometimes not"),
     "R14": _rule("R14", "high", "Privilege-escalation attempt", "attempt to create keys or cluster-admin bindings"),
     "R15": _rule("R15", "medium", "Service identity performing a never-seen action", "outside the actor's baseline behavior"),
+    "R17": _rule("R17", "critical", "Tripwire triggered",
+                 "a planted lure or canary credential was used; nothing legitimate ever touches these"),
     "R16": _rule("R16", "high", "First-seen credential used from outside the network",
                  "a service credential with no history suddenly active from an external IP"),
 }
@@ -205,6 +207,8 @@ def apply_rules(events: list[dict], baseline: dict) -> dict[int, list[str]]:
             hit(e, "R12")
         if action in ("iam:CreateAccessKey", "clusterrolebindings.create"):
             hit(e, "R14")
+        if action.startswith("tripwire.") or actor == "iam:svc-backup":
+            hit(e, "R17")
 
     for actor, evs in denied.items():
         lo = 0

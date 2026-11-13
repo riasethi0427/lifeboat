@@ -9,6 +9,7 @@ import os
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from lifeboat.notify import post_slack
 from lifeboat.pipeline import ROOT, Run
 
 RUN = Run()
@@ -16,9 +17,20 @@ LOG_PATH = os.environ.get("LOG_PATH", os.path.join(ROOT, "data", "logs.jsonl"))
 PORT = int(os.environ.get("PORT", "8000"))
 
 
-def slack_text(report: dict) -> str:
+def slack_text(report: dict, status: dict | None = None) -> str:
     lines = [f":rotating_light: *[{report.get('severity', '').upper()}] {report.get('headline', '')}*",
-             report.get("executive_summary", ""), "", "*Rotate now:*"]
+             report.get("containment_summary") or "", report.get("executive_summary", "")]
+    live = (status or {}).get("live") or {}
+    if live.get("actions"):
+        lines.append("\n*Already done by Lifeboat (reversible):*")
+        for a in live["actions"]:
+            lines.append(f"- {a['label']}")
+    pend = [a for a in (status or {}).get("approvals", []) if a["status"] == "pending"]
+    if pend:
+        lines.append("\n*Waiting for your approval:*")
+        for a in pend:
+            lines.append(f"- {a['action']}")
+    lines.append("\n*Rotate:*")
     for c in sorted(report.get("credentials_to_rotate", []), key=lambda c: c.get("priority", 99)):
         lines.append(f"{c.get('priority')}. `{c.get('credential_id')}`: {c.get('why_exposed')}")
     lines.append("\n*Containment:*")
@@ -60,22 +72,19 @@ class H(BaseHTTPRequestHandler):
         if self.path == "/api/run":
             ok = RUN.start(LOG_PATH)
             self._json({"started": ok})
+        elif self.path.startswith("/api/live"):
+            protect = "protect=0" not in self.path
+            self._json({"started": RUN.start_live(protect)})
+        elif self.path.startswith("/api/approve/"):
+            RUN.approve(self.path.rsplit("/", 1)[-1])
+            self._json({"ok": True})
         elif self.path == "/api/notify":
             report = RUN.snapshot().get("report")
             if not report:
                 return self._json({"error": "no report yet"}, 400)
-            text = slack_text(report)
-            hook = os.environ.get("SLACK_WEBHOOK_URL")
-            if not hook:
-                return self._json({"sent": False, "preview": text,
-                                   "note": "Set SLACK_WEBHOOK_URL to post to your #incident channel."})
-            req = urllib.request.Request(hook, data=json.dumps({"text": text}).encode(),
-                                         headers={"Content-Type": "application/json"})
-            try:
-                urllib.request.urlopen(req, timeout=10)
-                self._json({"sent": True, "preview": text})
-            except Exception as ex:
-                self._json({"sent": False, "preview": text, "note": f"Slack error: {ex}"})
+            text = slack_text(report, RUN.snapshot())
+            ok, note = post_slack(text)
+            self._json({"sent": ok, "preview": text, "note": None if ok else note})
         else:
             self._json({"error": "not found"}, 404)
 

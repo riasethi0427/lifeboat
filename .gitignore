@@ -2,3 +2,5 @@ __pycache__/
 .venv/
 .env
 data/logs.jsonl
+data/background.jsonl
+data/live_run.jsonl

@@ -1,4 +1,18 @@
-# Lifeboat: local-first incident response for AI startups
+# Lifeboat: machine-speed defense for AI startups
+
+**v5: Lifeboat now stops the attack, not just explains it.** Attackers are now AI agents, and AI agents act on text they find.
+Lifeboat plants tripwires that only an automated attacker acts on (a note in `AGENTS.md` asking agents to "register" at an
+internal URL, and a canary AWS key next to the real ones). When one fires, deterministic reflexes apply **reversible**
+containment within half a second (isolate the pod, suspend the identity, quarantine the dataset, suspend the uploader),
+then Claude investigates, adds reversible actions if needed, and queues anything irreversible for human approval.
+The cloud in the demo is **simulated**: no real cloud APIs are called.
+
+| Replay of the same attack | Customer files read | Private models | Secrets exposed |
+|---|---|---|---|
+| Protection off | ~250 | 12 | 6 |
+| Protection on | 0 | 0 | 0 (contained 0.4 s after the tripwire) |
+
+## Earlier version: local-first incident response
 
 > In July 2026, Hugging Face was breached by an autonomous AI agent: 17,000+ actions over one weekend,
 > starting from a malicious dataset. Its responders ran forensics on an open-weight model on their own
@@ -21,6 +35,7 @@ The bar at the top of the UI shows bytes kept on the laptop vs. bytes sent to Cl
 ```bash
 pip install anthropic                       # only dependency
 python gen_logs.py                          # writes data/logs.jsonl (12,460 events, 4.6 MB)
+python gen_logs.py --background             # writes data/background.jsonl (normal activity for the v5 live replay)
 
 # optional but the point of the product: a local model
 ollama pull qwen3:8b                        # ~5 GB. On bad wifi: qwen3:4b, then LOCAL_MODEL=qwen3:4b
@@ -51,22 +66,22 @@ Hidden in normal noise (incl. an inference gateway that *legitimately* does 70 r
 
 Plus a decoy: the on-call SRE's legitimate `kubectl exec` on Saturday. Claude should check the on-call roster and clear it.
 
-## 3-minute demo script
+## 3-minute demo script (v5)
 
-Start the run while you give the hook. The report lands about 90 seconds later.
-
-1. **(20s) Hook.** "In July, Hugging Face got breached by an AI agent over one weekend. They fought back with a model running on their own hardware. Your AI startup has the same pipeline and no security team." Click **Run investigation** now.
-2. **(15s)** "This is a weekend of logs from an AI startup: 12,000 events, 4.6 MB."
-3. **(30s) "Activity faster than any person" chart.** "192 actions a minute from a key that normally does 4. That's not a person." Point at the sidebar: **Read raw evidence, on this laptop, qwen3:8b**. The local model is reading the raw payloads right now.
-4. **(30s) Data boundary.** Sidebar: **Redact secrets, 9 removed**. Top bar: **4.6 MB kept on this laptop** vs. **~98 KB sent to Claude**. Click **View** to show exactly what Claude saw.
-5. **(45s) The report.** Read the headline. **Verdicts:** the on-call engineer's exec cleared as benign (Claude checked the roster), the attack marked malicious. **Rotate these credentials first:** point at #1 and read Claude's reason out loud (the order can differ between runs; each order is reasoned from the evidence). Copy one command.
-6. **(20s)** Click **Send to #incident**, and it lands in Slack.
-7. **(20s) Honest limits and why us.** Synthetic data in our own log format. Rules are tuned to ML pipelines on Kubernetes and AWS. Next: CloudTrail and Kubernetes audit importers plus a runtime sensor (Falco). v1 reads logs and does not auto-remediate; a human approves every action.
+1. **(20s) Hook.** "In July, an AI agent breached Hugging Face over one weekend. Machine-speed attacks need machine-speed defense. No human answers a page in six minutes on a Saturday."
+2. **(40s) Protection off.** Click **Replay with protection off**. "This is the same attack path, against a startup with no security team." Watch the orange counter climb: customer files read, keys dumped, models downloaded.
+3. **(15s) The insight.** "Attackers are now AI agents, and agents act on text they find. So we booby-trap our own infrastructure with instructions only an agent would follow."
+4. **(45s) Protection on.** Switch to **On** and replay. The agent reads the planted `AGENTS.md`, calls the lure URL, the tripwire fires, and four reversible actions land 0.4 seconds later. Every later attempt says **Denied by Lifeboat**. Counters stay at 0. Slack gets the alert.
+5. **(40s) Claude.** Point at the sidebar: the local model read the raw evidence on this laptop, secrets were redacted, and Claude investigated. Show **Waiting for your approval** (irreversible steps Claude won't take alone) and approve one. Show **View** to prove what left the laptop.
+6. **(20s) Honest limits.** Simulated cloud and synthetic replay. Lures catch agents that follow injected text; careful attackers may skip them, which is why the canary key and the detection rules are layered behind. Every automatic action is reversible.
 
 ### Likely judge questions
 
 - **Why not paste the logs into Claude?** 4.6 MB full of live secrets can't leave the company, and wouldn't fit anyway. The local model reads raw data; Claude gets ~98 KB of redacted findings.
-- **Does it work on real data?** Not yet: synthetic data in our own format. Next step is CloudTrail and Kubernetes audit importers.
+- **Does it work on real data?** Not yet: synthetic data and a simulated cloud. Next: CloudTrail and Kubernetes audit importers, and real reversible actions (AWS key deactivation, Kubernetes NetworkPolicy).
+- **What if the attacker ignores the lure?** Layers: the canary AWS key catches anyone who dumps the environment, and the rules and machine-speed detection still alert.
+- **Isn't automatic action dangerous?** Only tripwires trigger it (nothing legitimate touches them), and every automatic action is reversible with a one-line undo. Irreversible steps wait for a human.
+- **Isn't this just honeytokens?** Honeytokens exist (for example Thinkst Canary). The new parts are lures written for AI agents, automatic reversible response, and Claude's investigation, packaged for small AI startups.
 - **Who pays?** AI startups with 10 to 200 people, customer data, and no security team. Enterprise tools are priced and built for large security teams.
 
 ## Team split (4 people, ~3.5h)

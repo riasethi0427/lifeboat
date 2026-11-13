@@ -135,6 +135,14 @@ ev(datetime(2026, 11, 6, 23, 40, 9, tzinfo=UTC), "app", "org:northwind-trial", "
    "orgs/northwind-trial", cluster=None, src_ip="203.0.113.77", raw="signup plan=trial email_domain=northwind-ml.io")
 
 # ---------------------------------------------------------------- the intrusion
+BACKGROUND_ONLY = "--background" in sys.argv
+if BACKGROUND_ONLY:  # v5 live replay generates the attacker reactively; write normal activity only
+    events.sort(key=lambda e: e["ts"])
+    with open("data/background.jsonl", "w") as f:
+        for e in events:
+            f.write(json.dumps(e) + "\n")
+    print(f"wrote {len(events)} background events to data/background.jsonl")
+    sys.exit(0)
 t = datetime(2026, 11, 7, 1, 58, 12, tzinfo=UTC)
 ev(t, "app", "org:northwind-trial", "customer", "dataset.upload", "datasets/northwind/eval-mix-v2", cluster=None,
    src_ip="203.0.113.77",
@@ -225,7 +233,7 @@ for m in ["ft-acme-legal-v3", "ft-globex-support-v7", "ft-initech-claims-v2", "f
 
 # ---------------------------------------------------------------- write
 events.sort(key=lambda e: e["ts"])
-out = sys.argv[1] if len(sys.argv) > 1 else "data/logs.jsonl"
+out = next((a for a in sys.argv[1:] if not a.startswith("--")), "data/logs.jsonl")
 with open(out, "w") as f:
     for e in events:
         f.write(json.dumps(e) + "\n")
