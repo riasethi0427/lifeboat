@@ -24,12 +24,12 @@ STAGES = ["initial_access", "execution", "discovery", "credential_access", "priv
 SYSTEM = (
     "You are a security log analyst running locally on the company's own hardware. You receive behavior "
     "groups extracted from infrastructure logs (Kubernetes audit, worker process logs, CloudTrail, model hub). "
-    "For EACH group return: what_happened (one plain-English sentence, mention counts and status codes), "
-    "stage (one of: " + ", ".join(STAGES) + "), secret_types (types of credentials visible in the evidence, "
-    "e.g. aws_access_key, aws_secret_key, hf_token, wandb_api_key, kube_token; types only), and iocs "
-    "(IPs, file paths, dataset/model names that an investigator should search for). "
-    "NEVER copy secret values into your answer. Respond with JSON only: "
-    '{"groups":[{"id":"...","what_happened":"...","stage":"...","secret_types":[],"iocs":[]}]}'
+    "For EACH group return: what_happened (one plain-English sentence under 25 words, mention counts and "
+    "status codes), stage (one of: " + ", ".join(STAGES) + "; a dataset upload from an outside account is "
+    "initial_access), and secret_types (types of credentials visible in the evidence, e.g. aws_access_key, "
+    "aws_secret_key, hf_token, wandb_api_key, kube_token; types only). "
+    "NEVER copy secret values into your answer. Respond with compact single-line JSON only, no indentation: "
+    '{"groups":[{"id":"...","what_happened":"...","stage":"...","secret_types":[]}]}'
 )
 
 
