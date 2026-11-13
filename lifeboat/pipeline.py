@@ -44,10 +44,18 @@ class Run:
     def __init__(self):
         self.lock = threading.Lock()
         self.status = new_status()
+        self._tl = threading.local()  # each run's threads write only to their own status dict
+
+    def _bind(self, status):
+        self._tl.status = status
+
+    def cancelled(self) -> bool:
+        st = getattr(self._tl, "status", None)
+        return st is not None and st is not self.status
 
     def update(self, fn):
         with self.lock:
-            fn(self.status)
+            fn(getattr(self._tl, "status", None) or self.status)
 
     def snapshot(self, include_egress=False):
         with self.lock:
@@ -67,9 +75,7 @@ class Run:
         return True
 
     def start_live(self, protect: bool):
-        with self.lock:
-            if self.status["state"] == "running":
-                return False
+        with self.lock:  # a new replay replaces (cancels) any run in progress
             self.status = new_status()
             self.status["state"] = "running"
             self.status["started"] = _now()
@@ -77,7 +83,8 @@ class Run:
                                    "tripwires": scenario.TRIPWIRES if protect else [], "fired": [],
                                    "feed": [], "actions": [], "slack": None,
                                    "outcome": {"files": 0, "models": 0, "secrets": 0, "denied": 0}}
-        threading.Thread(target=self._run_live, args=(protect,), daemon=True).start()
+        st = self.status
+        threading.Thread(target=self._run_live, args=(protect, st), daemon=True).start()
         return True
 
     def approve(self, item_id: str):
@@ -88,12 +95,19 @@ class Run:
                     a["approved_at"] = _now()
         self.update(f)
 
-    def _run_live(self, protect: bool):
+    def _run_live(self, protect: bool, st: dict):
+        self._bind(st)
         try:
             path, extra = self._replay(protect)
+            if path is None:
+                return
+            if self.cancelled():
+                return
             self._pipeline(path, extra=extra)
             self.update(lambda s: s.update(state="done", finished=_now()))
         except Exception as ex:
+            if self.cancelled():
+                return
             msg = f"{type(ex).__name__}: {ex}"
             self.update(lambda s: s.update(state="error", error=msg))
 
@@ -155,6 +169,8 @@ class Run:
         emitted, bi, pending, done_atk, prev_t = [], 0, None, False, None
         outcome = {"files": 0, "models": 0, "secrets": 0, "denied": 0}
         while True:
+            if self.cancelled():
+                return None, None
             if pending is None and not done_atk:
                 try:
                     pending = next(atk)
@@ -200,7 +216,9 @@ class Run:
                     self.update(lambda s, a=a: s["live"]["actions"].append(a))
                     self._feed(f"act:{a['id']}", "lifeboat", f"Lifeboat: {a['label']}", a["ts"])
                 if acts:
-                    threading.Thread(target=self._slack_alert, args=(e, acts), daemon=True).start()
+                    st_ref = self._tl.status
+                    threading.Thread(target=lambda e=e, acts=acts: (self._bind(st_ref), self._slack_alert(e, acts)),
+                                     daemon=True).start()
         self.update(lambda s: s["live"].update(done=True))
 
         # Write the combined log (normal weekend + what the attacker actually did) for the investigation.
@@ -236,7 +254,8 @@ class Run:
             self.update(f)
             return {"ok": True, "queued_for_human": action}
 
-        extra = {"live": {"status": status_fn, "act": act_fn, "approve": approve_fn}, "summary": status_fn()}
+        extra = {"live": {"status": status_fn, "act": act_fn, "approve": approve_fn, "cancelled": self.cancelled},
+                 "summary": status_fn()}
         return out, extra
 
     def _slack_alert(self, e, acts):
@@ -315,7 +334,9 @@ class Run:
             report = fallback_report(findings)
         else:
             def on_tool(name, args):
-                summary = args.get("group_id") or args.get("credential_type") or ""
+                summary = (args.get("group_id") or args.get("credential_type") or
+                           (f"{args.get('kind', '')} {args.get('target', '')}".strip() if name == "take_reversible_action" else "") or
+                           args.get("action") or "")
                 self.update(lambda s: s["claude"]["tool_calls"].append({"t": _now(), "name": name, "arg": summary}))
 
             def on_egress(nbytes, last_msg):

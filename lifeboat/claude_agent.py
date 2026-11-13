@@ -223,6 +223,8 @@ class Investigation:
         messages = [{"role": "user", "content": "Investigate this weekend's detections and file the incident report.\n\n"
                                                 + self.overview()}]
         for turn in range(MAX_TURNS):
+            if self.live and self.live.get("cancelled") and self.live["cancelled"]():
+                raise RuntimeError("cancelled")
             ser = json.dumps(messages, default=_ser)
             body = json.dumps({"system": system, "messages": json.loads(ser), "tools": tools})
             assert_clean(ser)
