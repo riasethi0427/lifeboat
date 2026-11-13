@@ -25,7 +25,7 @@ def new_status():
         "detect": {"done": False, "bursts": [], "candidates": [], "flagged": 0},
         "local": {"done": False, "analyzer": None, "groups_total": 0, "groups_done": 0, "routine": 0},
         "redact": {"done": False, "counts": {}},
-        "claude": {"done": False, "mode": None, "model": None, "tool_calls": [], "egress_bytes": 0, "egress_requests": 0},
+        "claude": {"done": False, "mode": None, "model": None, "tool_calls": [], "egress_bytes": 0, "egress_requests": 0, "error": None},
         "report": None,
         "egress_log": [],
     }
@@ -131,6 +131,13 @@ class Run:
                     s["egress_log"].append({"t": _now(), "bytes": nbytes,
                                             "new_content": json.loads(json.dumps(last_msg, default=lambda o: o.model_dump(exclude_none=True) if hasattr(o, "model_dump") else str(o)))})
                 self.update(f)
-            report = Investigation(findings, red, on_tool=on_tool, on_egress=on_egress).run()
+            try:
+                report = Investigation(findings, red, on_tool=on_tool, on_egress=on_egress).run()
+            except Exception as ex:  # API down, bad wifi, SDK missing, egress blocked: still show a report
+                msg = f"{type(ex).__name__}: {str(ex)[:160]}"
+                self.update(lambda s: s["claude"].update(error=msg))
+                report = fallback_report(findings)
+                report["headline"] = "Rule-based summary (Claude was unavailable for this run)"
+                report["executive_summary"] = f"Claude could not complete the investigation ({msg}). Showing the deterministic rule-based report instead."
         self.update(lambda s: s["claude"].update(done=True))
         self.update(lambda s: s.update(report=report))

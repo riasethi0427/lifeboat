@@ -36,7 +36,7 @@
   .btn-line:hover{border-color:var(--ink-3)}
 
   /* shell */
-  .shell{display:grid;grid-template-columns:300px 1fr;min-height:calc(100vh - 64px)}
+  .shell{display:grid;grid-template-columns:300px minmax(0,1fr);min-height:calc(100vh - 64px)}
   aside{background:var(--panel);border-right:1px solid var(--line);padding:24px 16px}
   aside h4{margin:0 12px 12px;font-size:13px;font-weight:600;color:var(--ink-3)}
   .step{display:grid;grid-template-columns:24px 1fr;gap:12px;padding:12px;border-radius:8px}
@@ -94,7 +94,7 @@
   /* tables */
   table{width:100%;border-collapse:collapse}
   th{text-align:left;font-weight:500;font-size:13px;color:var(--ink-3);padding:0 12px 10px;border-bottom:1px solid var(--line)}
-  td{padding:12px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14.5px}
+  td{padding:12px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14.5px;overflow-wrap:anywhere}
   tr:last-child td{border-bottom:0}
   td.t{font-family:var(--mono);font-size:12.5px;color:var(--ink-2);white-space:nowrap}
   td.n{font-weight:700;width:36px;color:var(--ink-3)}
@@ -102,7 +102,7 @@
   code{font-family:var(--mono);font-size:13px}
   .id{font-family:var(--mono);font-size:13px;background:var(--panel);padding:2px 7px;border-radius:5px;white-space:nowrap}
   .cmd{display:flex;align-items:center;gap:8px;margin-top:8px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 6px 6px 12px}
-  .cmd code{flex:1;overflow-x:auto;white-space:nowrap;font-size:12.5px}
+  .cmd code{flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px}
   .copy{border:1px solid var(--line);background:#fff;border-radius:5px;padding:3px 10px;font-size:12px}
   .muted{color:var(--ink-3)}
   .two{display:grid;grid-template-columns:1fr 1fr;gap:20px}
@@ -232,7 +232,8 @@ function render(s){
   }
   if (s.claude.mode){
     $("w-claude").textContent = s.claude.mode==="claude" ? "Claude, "+s.claude.model : "Claude not connected";
-    $("m-claude").textContent = s.claude.mode==="claude" ? `${s.claude.tool_calls.length} steps` : "Set ANTHROPIC_API_KEY to enable";
+    $("m-claude").textContent = s.claude.error ? `Claude unavailable, showing rule-based report (${s.claude.error})`
+      : s.claude.mode==="claude" ? `${s.claude.tool_calls.length} steps` : "Set ANTHROPIC_API_KEY to enable";
     $("activity").innerHTML = s.claude.tool_calls.slice(-7).map(c=>`<li><time>${esc(c.t)}</time><span>${esc(TOOL(c.name,c.arg))}</span></li>`).join("");
   }
   if (s.report){ $("m-report").textContent = "Ready"; }

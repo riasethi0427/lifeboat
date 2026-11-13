@@ -178,7 +178,7 @@ class Investigation:
         from .redact import assert_clean
         import anthropic
 
-        client = anthropic.Anthropic()
+        client = anthropic.Anthropic(timeout=120.0, max_retries=2)  # don't hang the demo on bad wifi
         messages = [{"role": "user", "content": "Investigate this weekend's detections and file the incident report.\n\n"
                                                 + self.overview()}]
         for turn in range(MAX_TURNS):
@@ -188,7 +188,7 @@ class Investigation:
             self.on_egress(len(body.encode()), messages[-1])
             force = turn >= MAX_TURNS - 2
             resp = client.messages.create(
-                model=CLAUDE_MODEL, max_tokens=8000, system=SYSTEM, tools=TOOLS, messages=messages,
+                model=CLAUDE_MODEL, max_tokens=16000, system=SYSTEM, tools=TOOLS, messages=messages,
                 tool_choice={"type": "tool", "name": "submit_incident_report"} if force else {"type": "auto"},
             )
             messages.append({"role": "assistant", "content": resp.content})
