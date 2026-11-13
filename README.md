@@ -1,4 +1,4 @@
-# 🛟 Lifeboat: local-first incident response for AI startups
+# Lifeboat: local-first incident response for AI startups
 
 > In July 2026, Hugging Face was breached by an autonomous AI agent: 17,000+ actions over one weekend,
 > starting from a malicious dataset. Its responders ran forensics on an open-weight model on their own
@@ -14,7 +14,7 @@
 | 3 | **Redact** | local, enforced in code | Keys, tokens, JWTs, secrets, blobs, employee emails→pseudonyms. `assert_clean()` blocks any request that still contains a secret-shaped string. |
 | 4 | **Investigate** | Claude (tool use) | Gets only redacted findings. Calls tools (`get_group`, `get_credential_inventory`, `get_rotation_playbook`, `get_on_call_roster`, …) to judge each candidate, rebuild the timeline, compute blast radius, order key rotation, write containment steps + a customer notification. Then posts to Slack with one click. |
 
-The egress meter in the UI shows bytes kept local vs. bytes sent to Claude, and **"inspect what left"** shows every request's new content.
+The bar at the top of the UI shows bytes kept on the laptop vs. bytes sent to Claude. **View** shows exactly what each request to Claude contained.
 
 ## Run it (5 minutes)
 
@@ -53,13 +53,21 @@ Plus a decoy: the on-call SRE's legitimate `kubectl exec` on Saturday. Claude sh
 
 ## 3-minute demo script
 
-1. **(20s) Hook.** "In July, Hugging Face got breached by an AI agent over one weekend. They fought back with a model running on their own hardware. Your AI startup has the same pipeline, and no security team."
-2. **(15s)** "This is a weekend of logs from an AI startup: 12,000 events, 4.6 MB." Click **Investigate**.
-3. **(30s) Point at the machine-speed panel.** "192 actions a minute from a key that normally does 4. That's not a person." Point at the LOCAL tags: the local model is reading the raw payloads right now.
-4. **(30s) Point at the Redact card and the egress meter.** "It found AWS keys, HF tokens and JWTs in the logs. Every one was stripped in code before anything left. Here's exactly what Claude saw." Open **inspect what left**.
-5. **(45s) The report.** Read the headline. Show verdicts: the SRE's exec cleared as on-call, the attack marked malicious. Show **rotate now, in this order**: which key is still in use goes first. Show a copyable command.
+Start the run while you give the hook. The report lands about 90 seconds later.
+
+1. **(20s) Hook.** "In July, Hugging Face got breached by an AI agent over one weekend. They fought back with a model running on their own hardware. Your AI startup has the same pipeline and no security team." Click **Run investigation** now.
+2. **(15s)** "This is a weekend of logs from an AI startup: 12,000 events, 4.6 MB."
+3. **(30s) "Activity faster than any person" chart.** "192 actions a minute from a key that normally does 4. That's not a person." Point at the sidebar: **Read raw evidence, on this laptop, qwen3:8b**. The local model is reading the raw payloads right now.
+4. **(30s) Data boundary.** Sidebar: **Redact secrets, 9 removed**. Top bar: **4.6 MB kept on this laptop** vs. **~98 KB sent to Claude**. Click **View** to show exactly what Claude saw.
+5. **(45s) The report.** Read the headline. **Verdicts:** the on-call engineer's exec cleared as benign (Claude checked the roster), the attack marked malicious. **Rotate these credentials first:** the HF token goes first because it was used last and has write access. Copy one command.
 6. **(20s)** Click **Send to #incident**, and it lands in Slack.
-7. **(20s) Honest limits + why us.** Synthetic data; detection rules are tuned to ML pipelines on Kubernetes + AWS; v1 reads logs, it doesn't auto-remediate (a human approves every action).
+7. **(20s) Honest limits and why us.** Synthetic data in our own log format. Rules are tuned to ML pipelines on Kubernetes and AWS. Next: CloudTrail and Kubernetes audit importers plus a runtime sensor (Falco). v1 reads logs and does not auto-remediate; a human approves every action.
+
+### Likely judge questions
+
+- **Why not paste the logs into Claude?** 4.6 MB full of live secrets can't leave the company, and wouldn't fit anyway. The local model reads raw data; Claude gets ~98 KB of redacted findings.
+- **Does it work on real data?** Not yet: synthetic data in our own format. Next step is CloudTrail and Kubernetes audit importers.
+- **Who pays?** AI startups with 10 to 200 people, customer data, and no security team. Enterprise tools are priced and built for large security teams.
 
 ## Team split (4 people, ~3.5h)
 
