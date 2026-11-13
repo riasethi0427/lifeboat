@@ -1,0 +1,6 @@
+{
+  "_comment": "Local-only identity directory. Employee emails are replaced by these pseudonyms before anything leaves the machine.",
+  "maya.chen@tessera.ai": {"pseudonym": "employee:MLE-1", "role": "ML Engineer"},
+  "rahul.d@tessera.ai": {"pseudonym": "employee:SWE-1", "role": "Software Engineer"},
+  "lena.ortiz@tessera.ai": {"pseudonym": "employee:SRE-1", "role": "Site Reliability Engineer (on-call this weekend)"}
+}

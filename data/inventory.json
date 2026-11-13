@@ -1,0 +1,32 @@
+{
+  "company": "Tessera AI (fictional demo company)",
+  "credentials": [
+    {"id": "aws-svc-training", "type": "aws_access_key", "identity": "iam:svc-training",
+     "masked": "AKIA…MPLE", "scope": "s3:GetObject/ListBucket on tessera-training-data and tessera-customer-datasets; no IAM write",
+     "stored_in": "env of training/training-scheduler deployment", "env_var": "AWS_ACCESS_KEY_ID"},
+    {"id": "hf-tessera-ci", "type": "hf_token", "identity": "hf-token:tessera-ci",
+     "masked": "hf_…0000", "scope": "read+write on all private repos in the tessera org (models: customer fine-tunes)",
+     "stored_in": "env of training/training-scheduler deployment", "env_var": "HF_TOKEN"},
+    {"id": "wandb-training", "type": "wandb_api_key", "identity": "wandb:tessera-training",
+     "masked": "0000…4444", "scope": "experiment tracking for all training runs (contains eval samples)",
+     "stored_in": "env of training/training-scheduler deployment", "env_var": "WANDB_API_KEY"},
+    {"id": "k8s-ds-worker-sa", "type": "k8s_service_account_token", "identity": "system:serviceaccount:data-pipeline:ds-worker",
+     "masked": "projected token", "scope": "data-pipeline namespace + (via role/legacy-debug) pods list/exec in training",
+     "stored_in": "mounted in every ds-worker pod"},
+    {"id": "kubeconfig-training-admin", "type": "kubeconfig_token", "identity": "kubeconfig:training-admin",
+     "masked": "eyJ…ZQ", "scope": "inference-prod: read secrets/configmaps/deployments in inference namespace",
+     "stored_in": "/root/.kube/config on training-scheduler image"},
+    {"id": "k8s-secret-hf-registry", "type": "hf_token", "identity": "inference/hf-registry-token",
+     "masked": "k8s secret", "scope": "read private models for serving", "stored_in": "k8s secret inference/hf-registry-token"},
+    {"id": "k8s-secret-openai-fallback", "type": "third_party_api_key", "identity": "inference/openai-fallback-key",
+     "masked": "k8s secret", "scope": "fallback LLM provider billing account", "stored_in": "k8s secret inference/openai-fallback-key"}
+  ],
+  "data_assets": [
+    {"id": "tessera-customer-datasets", "kind": "s3_bucket", "sensitivity": "customer confidential training data",
+     "customers": ["acme", "globex", "initech", "umbrella", "hooli", "northwind"]},
+    {"id": "tessera private models", "kind": "hf_private_repos", "sensitivity": "customer fine-tuned weights (can memorize training data)"}
+  ],
+  "on_call": [
+    {"who": "employee:SRE-1", "role": "Site Reliability Engineer", "on_call": "2026-11-06T17:00Z to 2026-11-09T17:00Z"}
+  ]
+}

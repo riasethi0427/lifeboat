@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lifeboat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14213D; --ink-2:#4A5568; --ink-3:#7A8599;
+    --canvas:#FFFFFF; --panel:#F4F6FA; --line:#E3E7EE;
+    --orange:#F2541B; --orange-soft:#FFF1EB;
+    --crit:#B42318; --crit-soft:#FEF3F2; --warn:#B54708; --warn-soft:#FFFAEB; --ok:#067647; --ok-soft:#ECFDF3;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--canvas);color:var(--ink);font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+  button{font:inherit;cursor:pointer}
+  button:focus-visible,a:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+
+  /* top bar */
+  .top{height:64px;display:flex;align-items:center;gap:28px;padding:0 28px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff;z-index:5}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:19px;letter-spacing:-.01em}
+  .logo svg{display:block}
+  .ws{display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line);border-radius:8px;color:var(--ink-2);font-size:14px}
+  .ws b{color:var(--ink);font-weight:600}
+  .top .spacer{flex:1}
+  .btn{border:0;border-radius:8px;padding:10px 18px;font-weight:600;font-size:14px}
+  .btn-primary{background:var(--ink);color:#fff}
+  .btn-primary:hover{background:#0c1528}
+  .btn-primary:disabled{background:#9aa3b5;cursor:default}
+  .btn-line{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .btn-line:hover{border-color:var(--ink-3)}
+
+  /* shell */
+  .shell{display:grid;grid-template-columns:300px 1fr;min-height:calc(100vh - 64px)}
+  aside{background:var(--panel);border-right:1px solid var(--line);padding:24px 16px}
+  aside h4{margin:0 12px 12px;font-size:13px;font-weight:600;color:var(--ink-3)}
+  .step{display:grid;grid-template-columns:24px 1fr;gap:12px;padding:12px;border-radius:8px}
+  .step.active{background:#fff;box-shadow:inset 0 0 0 1px var(--line)}
+  .step .name{font-weight:600;font-size:15px}
+  .step .meta{font-size:13px;color:var(--ink-2)}
+  .step .where{font-size:12px;color:var(--ink-3)}
+  .ic{width:22px;height:22px;border-radius:50%;border:2px solid #C5CCD9;display:grid;place-items:center;margin-top:1px}
+  .step.done .ic{border-color:var(--ok);background:var(--ok)}
+  .step.done .ic::after{content:"";width:9px;height:5px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:translateY(-1px) rotate(-45deg)}
+  .step.active .ic{border-color:var(--ink);border-top-color:transparent;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){.step.active .ic{animation:none;border-top-color:var(--ink)}}
+  .activity{margin:6px 0 0;padding:0;list-style:none;font-size:12.5px;color:var(--ink-2)}
+  .activity li{padding:3px 0;display:flex;gap:8px}
+  .activity time{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+
+  main{padding:32px 40px 80px;max-width:1180px}
+  h1{font-size:28px;line-height:1.2;letter-spacing:-.015em;margin:0 0 10px;font-weight:700}
+  h2{font-size:18px;margin:0 0 4px;font-weight:600;letter-spacing:-.005em}
+  .lead{color:var(--ink-2);max-width:72ch;margin:0}
+  section{border:1px solid var(--line);border-radius:10px;padding:22px 24px;margin-top:20px;background:#fff}
+  section > .sub{color:var(--ink-3);font-size:13.5px;margin:0 0 14px}
+
+  /* data boundary */
+  .boundary{display:grid;grid-template-columns:auto 1fr auto;gap:24px;align-items:end}
+  .num{font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+  .num-l{font-size:13.5px;color:var(--ink-2)}
+  .right{text-align:right}
+  .track{height:10px;border-radius:5px;background:var(--ink);position:relative;overflow:hidden;margin-bottom:8px}
+  .track i{position:absolute;right:0;top:0;bottom:0;background:var(--orange);min-width:3px;width:0}
+  .link{background:none;border:0;padding:0;color:var(--ink);text-decoration:underline;text-underline-offset:3px;font-size:13.5px}
+
+  /* speed chart */
+  .speed{display:grid;grid-template-columns:minmax(220px,300px) 1fr 120px;gap:10px 20px;align-items:center}
+  .speed .who{font-family:var(--mono);font-size:13px;word-break:break-all}
+  .speed .who span{display:block;font-family:var(--sans);color:var(--ink-3);font-size:12.5px}
+  .bars{display:grid;gap:5px}
+  .bar{height:12px;border-radius:3px}
+  .bar.burst{background:var(--orange)} .bar.norm{background:#C5CCD9}
+  .rate{text-align:right;font-size:13px;color:var(--ink-2)} .rate b{display:block;font-size:20px;color:var(--ink)}
+  .legend{display:flex;gap:18px;font-size:12.5px;color:var(--ink-2);margin-top:14px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+
+  /* incident header */
+  .incident{border-left:4px solid var(--crit)}
+  .incident.medium{border-left-color:var(--warn)} .incident.low{border-left-color:var(--ok)}
+  .pill{display:inline-block;font-size:12.5px;font-weight:600;padding:2px 9px;border-radius:6px}
+  .p-critical,.p-high,.p-malicious{background:var(--crit-soft);color:var(--crit)}
+  .p-medium,.p-needs_review{background:var(--warn-soft);color:var(--warn)}
+  .p-low,.p-benign{background:var(--ok-soft);color:var(--ok)}
+  .meta-row{display:flex;gap:14px;align-items:center;margin-bottom:12px;color:var(--ink-3);font-size:13.5px}
+  .actions{display:flex;gap:10px;margin-top:18px}
+
+  /* tables */
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;font-weight:500;font-size:13px;color:var(--ink-3);padding:0 12px 10px;border-bottom:1px solid var(--line)}
+  td{padding:12px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14.5px}
+  tr:last-child td{border-bottom:0}
+  td.t{font-family:var(--mono);font-size:12.5px;color:var(--ink-2);white-space:nowrap}
+  td.n{font-weight:700;width:36px;color:var(--ink-3)}
+  td.stage{white-space:nowrap;color:var(--ink-2);font-size:13.5px}
+  code{font-family:var(--mono);font-size:13px}
+  .id{font-family:var(--mono);font-size:13px;background:var(--panel);padding:2px 7px;border-radius:5px;white-space:nowrap}
+  .cmd{display:flex;align-items:center;gap:8px;margin-top:8px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 6px 6px 12px}
+  .cmd code{flex:1;overflow-x:auto;white-space:nowrap;font-size:12.5px}
+  .copy{border:1px solid var(--line);background:#fff;border-radius:5px;padding:3px 10px;font-size:12px}
+  .muted{color:var(--ink-3)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .two section{margin-top:20px}
+  .letter{white-space:pre-wrap;font-size:14.5px;color:var(--ink-2);max-width:68ch}
+  ul.plain{margin:6px 0 0;padding-left:18px;color:var(--ink-2)} ul.plain li{margin:4px 0}
+  .err{background:var(--crit-soft);color:var(--crit);border-radius:8px;padding:12px 16px;margin-bottom:16px}
+  .hidden{display:none !important}
+  .empty{padding:56px 0 0;max-width:62ch}
+  .empty p{color:var(--ink-2)}
+
+  dialog{border:1px solid var(--line);border-radius:10px;max-width:900px;width:92vw;padding:0}
+  dialog::backdrop{background:rgba(20,33,61,.35)}
+  dialog header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line);font-weight:600}
+  dialog pre{margin:0;padding:16px 20px;max-height:65vh;overflow:auto;font:12.5px/1.5 var(--mono);white-space:pre-wrap}
+
+  @media (max-width:900px){.shell{grid-template-columns:1fr}aside{border-right:0;border-bottom:1px solid var(--line)}main{padding:24px 18px}.two{grid-template-columns:1fr}.speed{grid-template-columns:1fr}.rate{text-align:left}}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="logo">
+    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="11" fill="none" stroke="#F2541B" stroke-width="5"/><circle cx="13" cy="13" r="11" fill="none" stroke="#14213D" stroke-width="5" stroke-dasharray="8.6 8.7" transform="rotate(-20 13 13)"/></svg>
+    Lifeboat
+  </div>
+  <div class="ws">Workspace <b>Tessera AI</b></div>
+  <div class="spacer"></div>
+  <button class="btn btn-primary" id="runBtn" onclick="run()">Run investigation</button>
+</div>
+
+<div class="shell">
+  <aside>
+    <h4>Investigation</h4>
+    <div class="step" id="st-detect"><div class="ic"></div><div><div class="name">Detect</div><div class="where">On this laptop</div><div class="meta" id="m-detect"></div></div></div>
+    <div class="step" id="st-local"><div class="ic"></div><div><div class="name">Read raw evidence</div><div class="where" id="w-local">On this laptop</div><div class="meta" id="m-local"></div></div></div>
+    <div class="step" id="st-redact"><div class="ic"></div><div><div class="name">Redact secrets</div><div class="where">On this laptop</div><div class="meta" id="m-redact"></div></div></div>
+    <div class="step" id="st-claude"><div class="ic"></div><div><div class="name">Investigate</div><div class="where" id="w-claude">Claude</div><div class="meta" id="m-claude"></div><ul class="activity" id="activity"></ul></div></div>
+    <div class="step" id="st-report"><div class="ic"></div><div><div class="name">Incident report</div><div class="meta" id="m-report"></div></div></div>
+  </aside>
+
+  <main>
+    <div id="err" class="err hidden"></div>
+
+    <div id="empty" class="empty">
+      <h1>Weekend logs from Tessera AI</h1>
+      <p>12,460 events from Kubernetes audit, worker processes, CloudTrail, and the model hub, Friday 18:00 to Monday 08:00 UTC. Raw logs stay on this laptop. Claude only sees redacted findings.</p>
+      <button class="btn btn-primary" onclick="run()">Run investigation</button>
+    </div>
+
+    <section id="boundary" class="hidden">
+      <div class="boundary">
+        <div><div class="num" id="bLocal">0 MB</div><div class="num-l">kept on this laptop</div></div>
+        <div><div class="track"><i id="bBar"></i></div></div>
+        <div class="right"><div class="num" id="bSent">0 KB</div><div class="num-l">sent to Claude, redacted <button class="link" onclick="showEgress()">View</button></div></div>
+      </div>
+    </section>
+
+    <section id="speedCard" class="hidden">
+      <h2>Activity faster than any person</h2>
+      <p class="sub">Each identity compared with its own normal rate</p>
+      <div class="speed" id="speed"></div>
+      <div class="legend"><span><i style="background:var(--orange)"></i>During the incident</span><span><i style="background:#C5CCD9"></i>Normal peak</span></div>
+    </section>
+
+    <div id="report"></div>
+  </main>
+</div>
+
+<dialog id="dlg"><header><span id="dlgTitle"></span><button class="btn btn-line" onclick="dlg.close()">Close</button></header><pre id="dlgBody"></pre></dialog>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtB = n => n >= 1e6 ? (n/1e6).toFixed(1)+" MB" : n >= 1e3 ? (n/1e3).toFixed(1)+" KB" : n+" B";
+const when = ts => { if(!ts) return ""; const d = new Date(ts); if (isNaN(d)) return ts;
+  return d.toLocaleString("en-US",{weekday:"short",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false,timeZone:"UTC"}); };
+const STAGE = s => (s||"").replaceAll("_"," ").replace(/^\w/, c=>c.toUpperCase());
+const TOOL = (n,a) => ({get_group:`Read evidence ${a}`, get_machine_speed_bursts:"Checked machine-speed activity",
+  get_credential_inventory:"Loaded credential inventory", get_rotation_playbook:`Opened playbook: ${STAGE(a)}`,
+  get_on_call_roster:"Checked on-call roster", submit_incident_report:"Filed the report"}[n] || n);
+let timer=null, rendered=false;
+
+async function run(){
+  $("runBtn").disabled = true; rendered = false;
+  $("empty").classList.add("hidden"); $("report").innerHTML = "";
+  await fetch("/api/run",{method:"POST"});
+  clearInterval(timer); timer = setInterval(poll, 600); poll();
+}
+async function poll(){
+  const s = await (await fetch("/api/status")).json();
+  render(s);
+  if (s.state==="done"||s.state==="error"){ clearInterval(timer); $("runBtn").disabled=false; }
+}
+function step(id, done, active){ const el=$(id); el.classList.toggle("done",!!done); el.classList.toggle("active",!done&&!!active); }
+
+function render(s){
+  $("err").classList.toggle("hidden",!s.error); $("err").textContent = s.error ? "The run stopped: "+s.error : "";
+  const running = s.state==="running";
+  step("st-detect", s.detect.done, running);
+  step("st-local", s.local.done, s.detect.done);
+  step("st-redact", s.redact.done, s.local.done);
+  step("st-claude", s.claude.done, s.redact.done);
+  step("st-report", !!s.report, s.claude.done);
+
+  if (s.ingest.done){
+    $("boundary").classList.remove("hidden");
+    $("bLocal").textContent = fmtB(s.ingest.bytes);
+    $("bSent").textContent = fmtB(s.claude.egress_bytes);
+    const pct = s.ingest.bytes ? Math.min(100, 100*s.claude.egress_bytes/s.ingest.bytes) : 0;
+    $("bBar").style.width = pct+"%";
+  }
+  if (s.detect.done){
+    const hi = s.detect.candidates.filter(c=>c.severity==="critical"||c.severity==="high").length;
+    $("m-detect").textContent = `${s.detect.flagged} of ${s.ingest.events.toLocaleString()} events flagged, ${s.detect.candidates.length} candidates`;
+    renderSpeed(s.detect.bursts);
+  }
+  if (s.local.groups_total){
+    $("w-local").textContent = s.local.analyzer && s.local.analyzer.startsWith("local model") ? "On this laptop, "+s.local.analyzer.replace("local model: ","") : "On this laptop, rule-based";
+    $("m-local").textContent = `${s.local.groups_done} of ${s.local.groups_total} high-risk groups read`;
+  }
+  if (s.redact.done){
+    const n = Object.values(s.redact.counts).reduce((a,b)=>a+b,0);
+    $("m-redact").textContent = `${n} secrets and identities removed`;
+  }
+  if (s.claude.mode){
+    $("w-claude").textContent = s.claude.mode==="claude" ? "Claude, "+s.claude.model : "Claude not connected";
+    $("m-claude").textContent = s.claude.mode==="claude" ? `${s.claude.tool_calls.length} steps` : "Set ANTHROPIC_API_KEY to enable";
+    $("activity").innerHTML = s.claude.tool_calls.slice(-7).map(c=>`<li><time>${esc(c.t)}</time><span>${esc(TOOL(c.name,c.arg))}</span></li>`).join("");
+  }
+  if (s.report){ $("m-report").textContent = "Ready"; }
+  if (s.report && !rendered){ rendered=true; renderReport(s.report); }
+}
+
+function renderSpeed(b){
+  if (!b.length) return;
+  $("speedCard").classList.remove("hidden");
+  const max = Math.max(...b.map(x=>x.peak_per_min));
+  $("speed").innerHTML = b.map(x=>`
+    <div class="who">${esc(x.actor)}<span>${x.events} actions, ${x.median_gap_ms} ms apart on average</span></div>
+    <div class="bars"><div class="bar burst" style="width:${Math.max(1,100*x.peak_per_min/max)}%"></div><div class="bar norm" style="width:${Math.max(.6,100*x.baseline_peak_per_min/max)}%"></div></div>
+    <div class="rate"><b>${x.peak_per_min}/min</b>normally ${x.baseline_peak_per_min}/min</div>`).join("");
+}
+
+function cmd(c){ return c ? `<div class="cmd"><code>${esc(c)}</code><button class="copy" onclick="copyCmd(this)">Copy</button></div>` : ""; }
+function copyCmd(btn){ navigator.clipboard.writeText(btn.previousElementSibling.textContent); btn.textContent="Copied"; setTimeout(()=>btn.textContent="Copy",1200); }
+
+function renderReport(r){
+  const sev = r.severity||"high";
+  const verdicts = (r.verdicts||[]).map(v=>`<tr><td><span class="id">${esc(v.candidate_id)}</span></td><td><span class="pill p-${esc(v.verdict)}">${esc(STAGE(v.verdict))}</span></td><td>${esc(v.reason)}</td></tr>`).join("");
+  const tl = (r.timeline||[]).map(t=>`<tr><td class="t">${esc(when(t.time))}</td><td class="stage">${esc(STAGE(t.stage))}</td><td>${esc(t.what)}</td></tr>`).join("");
+  const creds = (r.credentials_to_rotate||[]).slice().sort((a,b)=>a.priority-b.priority).map(c=>`<tr><td class="n">${c.priority}</td><td><span class="id">${esc(c.credential_id)}</span></td><td>${esc(c.why_exposed)}${c.evidence_of_use?`<div class="muted" style="font-size:13.5px;margin-top:2px">${esc(c.evidence_of_use)}</div>`:""}</td></tr>`).join("");
+  const steps = (r.containment_steps||[]).slice().sort((a,b)=>a.order-b.order).map(s=>`<tr><td class="n">${s.order}</td><td>${esc(s.step)}${cmd(s.command)}</td><td class="muted" style="white-space:nowrap">${esc(s.owner||"")}</td></tr>`).join("");
+  const data = (r.data_impact||[]).map(d=>`<tr><td><b>${esc(d.asset)}</b></td><td>${esc(d.what_happened)}</td><td>${esc((d.customers_affected||[]).join(", "))}</td></tr>`).join("");
+  const li = a => (a||[]).map(x=>`<li>${esc(x)}</li>`).join("");
+  $("report").innerHTML = `
+  <section class="incident ${esc(sev)}">
+    <div class="meta-row"><span class="pill p-${esc(sev)}">${esc(STAGE(sev))}</span><span>Incident report</span></div>
+    <h1>${esc(r.headline)}</h1>
+    <p class="lead">${esc(r.executive_summary)}</p>
+    ${r.attacker_profile?`<p class="lead" style="margin-top:10px"><b style="color:var(--ink)">Who did this:</b> ${esc(r.attacker_profile)}</p>`:""}
+    <div class="actions"><button class="btn btn-primary" onclick="notify()">Send to #incident</button><button class="btn btn-line" onclick="showEgress()">View data sent to Claude</button></div>
+  </section>
+  <section><h2>Rotate these credentials first</h2><p class="sub">In order. The one still in use is first.</p>
+    <table><tr><th>#</th><th>Credential</th><th>Why it's exposed</th></tr>${creds}</table></section>
+  <section><h2>Containment plan</h2><p class="sub">Steps an engineer can run tonight</p>
+    <table><tr><th>#</th><th>Step</th><th>Owner</th></tr>${steps}</table></section>
+  <section><h2>What happened</h2>
+    <table><tr><th>Time (UTC)</th><th>Stage</th><th>Activity</th></tr>${tl}</table></section>
+  <section><h2>Verdicts</h2>
+    <table><tr><th>Candidate</th><th>Verdict</th><th>Reason</th></tr>${verdicts}</table></section>
+  ${data?`<section><h2>Data affected</h2><table><tr><th>Asset</th><th>What happened</th><th>Customers</th></tr>${data}</table></section>`:""}
+  <div class="two">
+    ${r.customer_notification_draft?`<section><h2>Customer notice draft</h2><p class="letter">${esc(r.customer_notification_draft)}</p></section>`:"<div></div>"}
+    <section><h2>Root causes</h2><ul class="plain">${li(r.root_causes)||"<li class='muted'>None recorded</li>"}</ul>
+      <h2 style="margin-top:18px">Open questions</h2><ul class="plain">${li(r.open_questions)||"<li class='muted'>None recorded</li>"}</ul></section>
+  </div>`;
+}
+
+async function showEgress(){
+  const log = await (await fetch("/api/egress")).json();
+  $("dlgTitle").textContent = log.length ? `Data sent to Claude in ${log.length} requests` : "Data sent to Claude";
+  $("dlgBody").textContent = log.length ? log.map((e,i)=>`Request ${i+1} at ${e.t}, ${fmtB(e.bytes)}\n${JSON.stringify(e.new_content,null,1)}`).join("\n\n") : "Nothing has been sent.";
+  dlg.showModal();
+}
+async function notify(){
+  const r = await (await fetch("/api/notify",{method:"POST"})).json();
+  $("dlgTitle").textContent = r.sent ? "Posted to #incident" : (r.note || "Message preview");
+  $("dlgBody").textContent = r.preview || r.error || "";
+  dlg.showModal();
+}
+</script>
+</body>
+</html>
