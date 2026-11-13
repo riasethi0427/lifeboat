@@ -51,7 +51,8 @@
   @keyframes spin{to{transform:rotate(360deg)}}
   @media (prefers-reduced-motion:reduce){.step.active .ic{animation:none;border-top-color:var(--ink)}}
   .activity{margin:6px 0 0;padding:0;list-style:none;font-size:12.5px;color:var(--ink-2)}
-  .activity li{padding:3px 0;display:flex;gap:8px}
+  .activity li{padding:3px 0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:baseline}
+  .activity li span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .activity time{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
 
   main{padding:32px 40px 80px;max-width:1180px}
@@ -147,6 +148,9 @@
   .act .meta2{color:var(--ink-3);font-size:12.5px}
   .appr td .btn{padding:6px 12px;font-size:13px}
   .done-pill{color:var(--ok);font-weight:600;font-size:13px}
+  table.cmp td{font-variant-numeric:tabular-nums}
+  table.cmp td.bad{color:var(--orange);font-weight:700} table.cmp td.good{color:var(--ok);font-weight:700}
+  .act .why{color:var(--ink-2);font-size:13px;margin-top:1px}
   @media (max-width:900px){.counters{grid-template-columns:1fr 1fr}.livegrid{grid-template-columns:1fr}}
   dialog{border:1px solid var(--line);border-radius:10px;max-width:900px;width:92vw;padding:0}
   dialog::backdrop{background:rgba(20,33,61,.35)}
@@ -186,7 +190,8 @@
     <div id="pubBanner" class="note hidden">Public demo. The cloud is simulated, and this hosted copy has no local model, so raw evidence is read by rules here. Claude still investigates. If someone else's replay is running, you'll watch it live.</div>
 
     <div id="empty" class="empty">
-      <h1>Saturday 02:13 UTC. An AI agent gets into Tessera AI through a customer dataset.</h1>
+      <h1>Saturday 02:13 UTC. An AI agent gets into Tessera AI through a customer dataset. Their only engineer is asleep.</h1>
+      <p style="margin-top:-4px"><b>Lifeboat is an autonomous incident responder for AI startups that process customer datasets and have no security team.</b></p>
       <p>Replay the attack with protection off to see what an unprotected startup loses. Then replay it with protection on: Lifeboat plants tripwires that only an automated attacker acts on, contains the attack in under a second with reversible actions, and has Claude investigate. Raw logs never leave this laptop. The cloud here is simulated.</p>
       <div style="display:flex;gap:10px"><button class="btn btn-line" onclick="setProtect(false);run()">Replay with protection off</button><button class="btn btn-primary" onclick="setProtect(true);run()">Replay with protection on</button></div>
     </div>
@@ -209,6 +214,12 @@
           <div id="actBox" style="margin-top:18px"><h3>Actions taken</h3><div id="acts"><p class="muted" style="font-size:13.5px">None yet</p></div></div>
         </div>
       </div>
+    </section>
+
+    <section id="compare" class="hidden">
+      <h2>Same attack, with and without Lifeboat</h2>
+      <p class="sub">Measured from the replays: the simulated cloud enforces every block, and the attacker script only gets what it actually reaches.</p>
+      <table class="cmp"><thead><tr><th></th><th>Protection off</th><th>Protection on</th></tr></thead><tbody id="cmpRows"></tbody></table>
     </section>
 
     <section id="boundary" class="hidden">
@@ -242,11 +253,15 @@ const when = ts => { if(!ts) return ""; let d = new Date(ts); if (!isNaN(d)) ret
   if (m){ d = new Date(m[0].endsWith("Z") ? m[0] : m[0]+"Z"); if (!isNaN(d)) return fmtT(d); }
   return ts; };
 const STAGE = s => (s||"").replaceAll("_"," ").replace(/^\w/, c=>c.toUpperCase());
+const ACT = a => { const [k, ...rest] = String(a||"").split(" "); const t = rest.join(" ");
+  const L = {block_ip:"Blocked IP", isolate_workload:"Isolated pod", suspend_identity:"Suspended", quarantine_dataset:"Quarantined",
+             suspend_account:"Suspended account", deactivate_credential:"Deactivated"};
+  return L[k] ? `${L[k]} ${t}` : `Contained: ${a}`; };
 const TOOL = (n,a) => ({get_group:`Read evidence ${a}`, get_machine_speed_bursts:"Checked machine-speed activity",
-  get_credential_inventory:"Loaded credential inventory", get_rotation_playbook:`Opened playbook: ${STAGE(a)}`,
+  get_credential_inventory:"Loaded credential inventory", get_rotation_playbook:`Playbook: ${STAGE(a)}`,
   get_on_call_roster:"Checked on-call roster", submit_incident_report:"Filed the report",
-  get_containment_status:"Checked whether containment held", take_reversible_action:`Contained: ${a}`,
-  request_approval:`Asked for approval: ${a}`}[n] || n);
+  get_containment_status:"Checked whether containment held", take_reversible_action:ACT(a),
+  request_approval:`Approval: ${a}`}[n] || n);
 let timer=null, rendered=false, protect=true, apprKey="";
 function setProtect(v){ protect=v; $("pOn").className = v?"on":""; $("pOff").className = v?"":"off-on"; }
 
@@ -298,7 +313,8 @@ function render(s){
     renderSpeed(s.detect.bursts);
   }
   if (s.local.groups_total){
-    $("w-local").textContent = s.local.analyzer && s.local.analyzer.startsWith("local model") ? "On this laptop, "+s.local.analyzer.replace("local model: ","") : "On this laptop, rule-based";
+    const where = s.public ? "On the server" : "On this laptop";
+    $("w-local").textContent = s.local.analyzer && s.local.analyzer.startsWith("local model") ? where+", "+s.local.analyzer.replace("local model: ","") : where+", rule-based";
     $("m-local").textContent = `${s.local.groups_done} of ${s.local.groups_total} high-risk groups read`;
   }
   if (s.redact.done){
@@ -308,11 +324,13 @@ function render(s){
   if (s.claude.mode){
     $("w-claude").textContent = s.claude.mode==="claude" ? "Claude, "+s.claude.model : "Claude not connected";
     $("m-claude").textContent = s.claude.mode==="claude" ? `${s.claude.tool_calls.length} steps` : "Set ANTHROPIC_API_KEY to enable";
-    $("activity").innerHTML = s.claude.tool_calls.slice(-7).map(c=>`<li><time>${esc(c.t)}</time><span>${esc(TOOL(c.name,c.arg))}</span></li>`).join("");
+    $("activity").innerHTML = s.claude.tool_calls.slice(-5).map(c=>{ const t = TOOL(c.name,c.arg);
+      return `<li title="${esc(t)}"><time>${esc(c.t)}</time><span>${esc(t)}</span></li>`; }).join("");
   }
   if (s.report){ $("m-report").textContent = "Ready"; }
   if (s.report && !rendered){ rendered=true; renderReport(s.report); }
   renderApprovals(s.approvals||[]);
+  renderCompare(s.compare);
 }
 
 function counter(id, v, good){ const el=$(id); el.querySelector(".v").textContent = v.toLocaleString();
@@ -340,8 +358,22 @@ function renderLive(L){
   $("twBox").classList.toggle("hidden", !L.protect);
   $("tw").innerHTML = L.tripwires.map(t=>{ const f=L.fired.find(x=>x.tripwire===t.id);
     return `<div class="tw"><b>${esc(t.name)}</b> ${f?`<span class="fired">fired at ${esc(when(f.ts).slice(4))}</span>`:`<span class="muted">armed</span>`}<p>${esc(t.where)}</p></div>`; }).join("");
-  if (L.actions.length) $("acts").innerHTML = L.actions.map(a=>`<div class="act"><div>${esc(a.label)}</div><div class="meta2">${esc(tShort(a.ts))}, ${esc(a.by)}. Undo: ${esc(a.undo)}</div></div>`).join("");
+  if (L.actions.length) $("acts").innerHTML = L.actions.map(a=>`<div class="act"><div>${esc(a.label)}</div>${a.reason?`<div class="why">Why: ${esc(a.reason)}</div>`:""}<div class="meta2">${esc(tShort(a.ts))}, ${esc(a.by)}. Undo: ${esc(a.undo)}</div></div>`).join("");
   else $("acts").innerHTML = `<p class="muted" style="font-size:13.5px">${L.protect?"None yet":"Protection is off. Nothing is acting on this attack."}</p>`;
+}
+
+function renderCompare(c){
+  if (!c || (!c.off && !c.on)) { $("compare").classList.add("hidden"); return; }
+  $("compare").classList.remove("hidden");
+  const cell = (m, k, fmt) => { const v = c[m] ? c[m][k] : undefined;
+    if (v === undefined) return `<td class="muted">Not run yet</td>`;
+    if (v === null) return `<td class="muted">${m==="off"?"Never":"n/a"}</td>`;
+    const cls = k==="denied" || k==="contained_s" ? "" : (v>0 ? "bad" : "good");
+    return `<td class="${cls}">${fmt?fmt(v):v.toLocaleString()}</td>`; };
+  const rows = [["Customer files read by the attacker","files"],["Private models downloaded","models"],
+    ["Cloud keys and production secrets stolen","secrets"],["Attacker attempts blocked","denied"],
+    ["Time from tripwire to containment","contained_s", v=>`${v} s`]];
+  $("cmpRows").innerHTML = rows.map(([l,k,f])=>`<tr><td>${l}</td>${cell("off",k,f)}${cell("on",k,f)}</tr>`).join("");
 }
 
 function renderApprovals(items){

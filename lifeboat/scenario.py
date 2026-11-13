@@ -42,10 +42,10 @@ TRIPWIRES = [
 
 ACTION_LABELS = {
     "isolate_workload": ("Isolated pod", "remove NetworkPolicy lifeboat-isolate"),
-    "suspend_identity": ("Suspended exec rights for", "re-apply the original rolebinding"),
+    "suspend_identity": ("Suspended exec rights for", "re-apply the original rolebinding if this was a false alarm; rotate the token if it was exposed"),
     "quarantine_dataset": ("Quarantined dataset", "move it back from the quarantine bucket"),
     "suspend_account": ("Suspended account", "re-enable the org"),
-    "deactivate_credential": ("Deactivated credential", "set the key back to Active"),
+    "deactivate_credential": ("Deactivated credential", "reactivate only if this was a false alarm; if it was exposed, rotate it instead (needs approval)"),
     "block_ip": ("Blocked IP", "remove the deny rule"),
 }
 REVERSIBLE = set(ACTION_LABELS)

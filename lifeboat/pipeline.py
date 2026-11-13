@@ -50,6 +50,7 @@ class Run:
         self.status = new_status()
         self._tl = threading.local()  # each run's threads write only to their own status dict
         self.claude_runs: list[float] = []  # timestamps of Claude investigations (public-demo rate limit)
+        self.history: dict = {}  # last measured outcome per mode, for the with/without comparison
 
     def _bind(self, status):
         self._tl.status = status
@@ -65,6 +66,7 @@ class Run:
     def snapshot(self, include_egress=False):
         with self.lock:
             s = json.loads(json.dumps(self.status, default=str))
+            s["compare"] = json.loads(json.dumps(self.history))
         if not include_egress:
             s.pop("egress_log", None)
         return s
@@ -227,6 +229,15 @@ class Run:
                     threading.Thread(target=lambda e=e, acts=acts: (self._bind(st_ref), self._slack_alert(e, acts)),
                                      daemon=True).start()
         self.update(lambda s: s["live"].update(done=True))
+        reflex = [a for a in sim.actions if a["by"] == "Lifeboat reflex"]
+        trip = next((e for e in emitted if scenario.is_tripwire(e)), None)
+        contained = (round((scenario.parse(reflex[0]["ts"]) - scenario.parse(trip["ts"])).total_seconds(), 1)
+                     if reflex and trip else None)
+        with self.lock:
+            if not self.cancelled():
+                self.history["on" if protect else "off"] = {
+                    **outcome, "contained_s": contained, "reflex_actions": len(reflex),
+                    "attacker_events": len(emitted), "at": _now()}
 
         # Write the combined log (normal weekend + what the attacker actually did) for the investigation.
         out = os.path.join(ROOT, "data", "live_run.jsonl")
