@@ -7,6 +7,8 @@ import urllib.request
 
 
 def post_slack(text: str) -> tuple[bool, str]:
+    if os.environ.get("PUBLIC_DEMO") == "1":
+        return False, "Slack posting is turned off in the public demo. This is the message it would send."
     hook = os.environ.get("SLACK_WEBHOOK_URL")
     if not hook:
         return False, "Set SLACK_WEBHOOK_URL to post to your #incident channel."

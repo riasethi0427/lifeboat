@@ -14,6 +14,8 @@ from .claude_agent import CLAUDE_MODEL, Investigation, fallback_report
 from .notify import post_slack
 from .redact import Redactor
 
+PUBLIC_DEMO = os.environ.get("PUBLIC_DEMO") == "1"
+PUBLIC_MAX_CLAUDE_RUNS_PER_HOUR = int(os.environ.get("PUBLIC_MAX_CLAUDE_RUNS_PER_HOUR", "6"))
 LIVE_SPEED = float(os.environ.get("LIVE_SPEED", "4"))       # simulated seconds per real second
 LIVE_MAX_GAP = float(os.environ.get("LIVE_MAX_GAP", "0.3"))  # cap idle time between events (real seconds)
 WINDOW = ("2026-11-07T01:56:00", "2026-11-07T02:20:30")
@@ -37,6 +39,8 @@ def new_status():
         "egress_log": [],
         "live": None,
         "approvals": [],
+        "public": PUBLIC_DEMO,
+        "notice": None,
     }
 
 
@@ -45,6 +49,7 @@ class Run:
         self.lock = threading.Lock()
         self.status = new_status()
         self._tl = threading.local()  # each run's threads write only to their own status dict
+        self.claude_runs: list[float] = []  # timestamps of Claude investigations (public-demo rate limit)
 
     def _bind(self, status):
         self._tl.status = status
@@ -66,7 +71,7 @@ class Run:
 
     def start(self, log_path: str):
         with self.lock:
-            if self.status["state"] == "running":
+            if self.status["state"] == "running" or PUBLIC_DEMO:
                 return False
             self.status = new_status()
             self.status["state"] = "running"
@@ -75,7 +80,9 @@ class Run:
         return True
 
     def start_live(self, protect: bool):
-        with self.lock:  # a new replay replaces (cancels) any run in progress
+        with self.lock:  # a new replay replaces (cancels) any run in progress, except in the public demo
+            if PUBLIC_DEMO and self.status["state"] == "running":
+                return False
             self.status = new_status()
             self.status["state"] = "running"
             self.status["started"] = _now()
@@ -328,6 +335,17 @@ class Run:
 
         # 5. Claude investigates redacted findings
         has_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
+        if has_key and PUBLIC_DEMO:
+            now = time.time()
+            with self.lock:
+                self.claude_runs = [t for t in self.claude_runs if now - t < 3600]
+                if len(self.claude_runs) >= PUBLIC_MAX_CLAUDE_RUNS_PER_HOUR:
+                    has_key = False
+                else:
+                    self.claude_runs.append(now)
+            if not has_key:
+                self.update(lambda s: s.update(notice="The public demo's hourly limit for Claude investigations is used up, "
+                                                      "so this run shows the rule-based report. Try again later."))
         self.update(lambda s: s["claude"].update(mode="claude" if has_key else "fallback",
                                                  model=CLAUDE_MODEL if has_key else None))
         if not has_key:
