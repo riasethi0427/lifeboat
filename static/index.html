@@ -149,6 +149,10 @@
   .appr td .btn{padding:6px 12px;font-size:13px}
   .done-pill{color:var(--ok);font-weight:600;font-size:13px}
   table.cmp td{font-variant-numeric:tabular-nums}
+  table.fixed{table-layout:fixed} table.fixed td{overflow-wrap:anywhere}
+  .cmd{min-width:0;max-width:100%}
+  .spill{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:5px;margin-right:6px;vertical-align:1px}
+  .spill.done{background:var(--ok-soft);color:var(--ok)} .spill.appr{background:var(--warn-soft);color:var(--warn)} .spill.ok{background:var(--ok-soft);color:var(--ok)}
   table.cmp td.bad{color:var(--orange);font-weight:700} table.cmp td.good{color:var(--ok);font-weight:700}
   .act .why{color:var(--ink-2);font-size:13px;margin-top:1px}
   @media (max-width:900px){.counters{grid-template-columns:1fr 1fr}.livegrid{grid-template-columns:1fr}}
@@ -362,6 +366,15 @@ function renderLive(L){
   else $("acts").innerHTML = `<p class="muted" style="font-size:13.5px">${L.protect?"None yet":"Protection is off. Nothing is acting on this attack."}</p>`;
 }
 
+const APPR_RE = /^\s*(waiting for (your )?approval|approval pending|awaiting approval|needs approval|pending approval)\s*[:\-–]?\s*/i;
+const DONE_RE = /^\s*(already )?done( by lifeboat)?( \(reversible\))?\s*[:\-–]?\s*/i;
+let LAST_APPR = [];
+function stepStatus(text){
+  if (APPR_RE.test(text)) { const allOk = LAST_APPR.length && LAST_APPR.every(a=>a.status==="approved");
+    return {pill: allOk ? `<span class="spill ok">Approved</span>` : `<span class="spill appr" data-appr>Needs approval</span>`, text: text.replace(APPR_RE,"")}; }
+  if (DONE_RE.test(text)) return {pill:`<span class="spill done">Done</span>`, text: text.replace(DONE_RE,"")};
+  return {pill:"", text};
+}
 function renderCompare(c){
   if (!c || (!c.off && !c.on)) { $("compare").classList.add("hidden"); return; }
   $("compare").classList.remove("hidden");
@@ -377,8 +390,13 @@ function renderCompare(c){
 }
 
 function renderApprovals(items){
+  LAST_APPR = items;
   const box = $("apprBox"); if (!box) return;
   const key = JSON.stringify(items); if (key===apprKey) return; apprKey = key;
+  const allOk = items.length && items.every(a=>a.status==="approved");
+  document.querySelectorAll("[data-appr]").forEach(el=>{ el.className = "spill " + (allOk?"ok":"appr"); el.textContent = allOk?"Approved":"Needs approval"; });
+  const pend = items.filter(a=>a.status!=="approved").length;
+  box.querySelector("h2").textContent = pend ? `Waiting for your approval (${pend})` : "Approvals: all approved";
   if (!items.length){ box.classList.add("hidden"); return; }
   box.classList.remove("hidden");
   $("apprRows").innerHTML = items.map(a=>`<tr><td>${esc(a.action)}<div class="muted" style="font-size:13.5px;margin-top:2px">${esc(a.reason)}</div>${cmd(a.command)}</td>
@@ -403,7 +421,8 @@ function renderReport(r){
   const verdicts = (r.verdicts||[]).map(v=>`<tr><td><span class="id">${esc(v.candidate_id)}</span></td><td><span class="pill p-${esc(v.verdict)}">${esc(STAGE(v.verdict))}</span></td><td>${esc(v.reason)}</td></tr>`).join("");
   const tl = (r.timeline||[]).map(t=>`<tr><td class="t">${esc(when(t.time))}</td><td class="stage">${esc(STAGE(t.stage))}</td><td>${esc(t.what)}</td></tr>`).join("");
   const creds = (r.credentials_to_rotate||[]).slice().sort((a,b)=>a.priority-b.priority).map(c=>`<tr><td class="n">${c.priority}</td><td><span class="id">${esc(c.credential_id)}</span></td><td>${esc(c.why_exposed)}${c.evidence_of_use?`<div class="muted" style="font-size:13.5px;margin-top:2px">${esc(c.evidence_of_use)}</div>`:""}</td></tr>`).join("");
-  const steps = (r.containment_steps||[]).slice().sort((a,b)=>a.order-b.order).map(s=>`<tr><td class="n">${s.order}</td><td>${esc(s.step)}${cmd(s.command)}</td><td class="muted" style="white-space:nowrap">${esc(s.owner||"")}</td></tr>`).join("");
+  const steps = (r.containment_steps||[]).slice().sort((a,b)=>a.order-b.order).map(s=>{ const st = stepStatus(s.step);
+    return `<tr><td class="n">${s.order}</td><td>${st.pill}${esc(st.text)}${cmd(s.command)}</td><td class="muted">${esc(s.owner||"")}</td></tr>`; }).join("");
   const data = (r.data_impact||[]).map(d=>`<tr><td><b>${esc(d.asset)}</b></td><td>${esc(d.what_happened)}</td><td>${esc((d.customers_affected||[]).join(", "))}</td></tr>`).join("");
   const li = a => (a||[]).map(x=>`<li>${esc(x)}</li>`).join("");
   $("report").innerHTML = `
@@ -416,11 +435,11 @@ function renderReport(r){
     <div class="actions"><button class="btn btn-primary" onclick="notify()">Send to #incident</button><button class="btn btn-line" onclick="showEgress()">View data sent to Claude</button></div>
   </section>
   <section id="apprBox" class="hidden appr"><h2>Waiting for your approval</h2><p class="sub">Irreversible steps Claude will not take on its own. Approvals are recorded; in this demo the cloud is simulated.</p>
-    <table><tbody id="apprRows"></tbody></table></section>
+    <table class="fixed"><colgroup><col><col style="width:130px"></colgroup><tbody id="apprRows"></tbody></table></section>
   <section><h2>Rotate these credentials first</h2><p class="sub">In priority order</p>
     ${creds?`<table><tr><th>#</th><th>Credential</th><th>Why it's exposed</th></tr>${creds}</table>`:`<p class="muted">No credentials were exposed.</p>`}</section>
   <section><h2>Containment plan</h2><p class="sub">Steps an engineer can run tonight</p>
-    <table><tr><th>#</th><th>Step</th><th>Owner</th></tr>${steps}</table></section>
+    <table class="fixed"><colgroup><col style="width:44px"><col><col style="width:190px"></colgroup><tr><th>#</th><th>Step</th><th>Owner</th></tr>${steps}</table></section>
   <section><h2>What happened</h2>
     <table><tr><th>Time (UTC)</th><th>Stage</th><th>Activity</th></tr>${tl}</table></section>
   <section><h2>Verdicts</h2>
